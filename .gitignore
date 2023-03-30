@@ -1,0 +1,11 @@
+runs/
+*/__pycache__/
+__pycache__
+weights/
+output/
+traced_model.pt
+inference/images
+*.code-workspace
+*.mp4
+logs/
+pie_annotations/
