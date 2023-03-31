@@ -46,7 +46,7 @@ class ObjectDetector:
         self.mot_converter = MOTConverter()
         self.model.eval()
         self.stride = int(self.model.stride.max())  # model stride
-        imgsz = check_img_size(self.img_size, s=self.stride)  # check img_size
+        self.imgsz = check_img_size(self.img_size, s=self.stride)  # check img_size
 
         self.bb_plotter = BoundingBoxPlotter()
 
@@ -95,7 +95,7 @@ class ObjectDetector:
 
 
     def preprocess(self, cv_img):
-        img = letterbox(cv_img, self.img_size, stride=self.stride)[0]
+        img = letterbox(cv_img, self.imgsz, auto = True, stride=self.stride)[0]
         img = img[..., ::-1].transpose(2, 0, 1)
         img = np.ascontiguousarray(img)
         img = torch.from_numpy(img).to(self.device)
