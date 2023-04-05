@@ -120,8 +120,12 @@ class ObjectDetector:
 
 if __name__ == '__main__':
     rospy.init_node('test_node', anonymous=True)
+    running_nodes = [x[0] for x in rospy.get_published_topics() if x[1] == "sensor_msgs/Image"]
+
+    if not running_nodes:
+        raise Exception("No node running Image")
 
     obj_detector = ObjectDetector()
-    rospy.Subscriber("/image_publisher_1680679032077590690/image_raw", Image, obj_detector.callback)
+    rospy.Subscriber(running_nodes[0], Image, obj_detector.callback)
 
     rospy.spin()
