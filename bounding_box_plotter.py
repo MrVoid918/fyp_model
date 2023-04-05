@@ -49,7 +49,7 @@ class BoundingBoxPlotter():
         cv.imshow('Press ESC to Exit', img) 
         cv.waitKey(5000)
 
-    def draw_sort(self, img, boxinfo):
+    def draw_sort(self, img, boxinfo, id = True):
         """
         Draw bounding boxes on image based on SORT output
         :param img: image to draw on
@@ -58,9 +58,12 @@ class BoundingBoxPlotter():
         for box in boxinfo:
             # don't plot if there is no bounding box, just return the image
             if np.any(box):
-                self._plot_one_box(box[:4], img, label=self.classes[0], color=self.colors[int(box[4]) % 300], line_thickness=2)
+                if id:
+                    self._plot_one_box(box[:4], img, label=str(int(box[4])), color=self.colors[int(box[4]) % 300], line_thickness=2)
+                else:
+                    self._plot_one_box(box[:4], img, label=self.classes[0], color=self.colors[int(box[4]) % 300], line_thickness=2)
 
-    def draw_mot(self, img, boxinfo) -> None:
+    def draw_mot(self, img, boxinfo, label = None) -> None:
         """
         Draw bounding boxes on image based on MOT challenge format
         Does not return images, rather it overwrites the images with the bounding boxes drawn on them
@@ -71,4 +74,7 @@ class BoundingBoxPlotter():
             # don't plot if there is no bounding box, just return the image
             if np.any(box):
                 box[4:6] = box[4:6] + box[2:4]
-                self._plot_one_box(box[2:6], img, label=self.classes[0], color=self.colors[int(box[1]) % 300], line_thickness=2)
+                if label is not None:
+                    self._plot_one_box(box[2:6], img, label=label, color=self.colors[int(box[1]) % 300], line_thickness=2)
+                else:
+                    self._plot_one_box(box[2:6], img, label=self.classes[0], color=self.colors[int(box[1]) % 300], line_thickness=2)

@@ -142,7 +142,7 @@ if __name__ == "__main__":
                 trackers = sort.update(dets)
                 # trackers, unm_tr, unm_gt = sort_oh.update(dets, [])
 
-                bb_plotter.draw_sort(im0s, trackers)
+                bb_plotter.draw_sort(im0s, trackers, id = True)
         
             if len(dataset) > 1:
                 vid_writer.write(im0s)
