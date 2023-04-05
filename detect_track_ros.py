@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import argparse
 from datetime import datetime
 from typing import Union
@@ -29,6 +31,10 @@ from loguru import logger
 from tqdm import tqdm
 from typing import Tuple
 
+import cv_bridge
+import rospy
+from sensor_msgs.msg import Image
+
 def get_ori_imsize(dir: str) -> Tuple[int, int]:
     im_path = list(Path(dir).iterdir())[0]
     img = cv2.imread(str(im_path))
@@ -49,6 +55,7 @@ class ObjectDetector:
         imgsz = check_img_size(self.img_size, s=self.stride)  # check img_size
 
         self.bb_plotter = BoundingBoxPlotter()
+        self.bridge = cv_bridge.CvBridge()
 
         self.half = self.device.type != 'cpu'  # half precision only supported on CUDA
 
@@ -69,10 +76,10 @@ class ObjectDetector:
     def callback(self, ros_img):
         # Here we call cv_bridge() to convert the ROS image to OpenCV format
         # cv_img = self.bridge.imgmsg_to_cv2(ros_img, "bgr8")
-        cv_img = ros_img
+        
+        cv_img = self.bridge.imgmsg_to_cv2(ros_img, "bgr8")
         t1 = time_synchronized()
         img = self.preprocess(cv_img)
-        print(img.shape)
         with torch.no_grad():
             pred = self.model(img, augment=None)[0]
         t2 = time_synchronized()
@@ -89,14 +96,19 @@ class ObjectDetector:
                 mot_data = self.mot_converter(det, frame = i)
                 dets = mot_data[:, 2:7]
                 trackers = self.sort.update(dets)
+
+                self.bb_plotter.draw_sort(cv_img, trackers)
                 # trackers, unm_tr, unm_gt = sort_oh.update(dets, [])
 
-        print("Done tracking this frame")
+        cv2.imshow("Image window", cv_img)
+        cv2.waitKey(10)
+
+        rospy.loginfo("Done tracking this frame")
 
 
     def preprocess(self, cv_img):
-        img = letterbox(cv_img, self.img_size, stride=self.stride)[0]
-        img = img[..., ::-1].transpose(2, 0, 1)
+        img = letterbox(cv_img, self.img_size, auto= True, stride=self.stride)[0]
+        img = img[..., ::-1].transpose(2, 1, 0) # Convert to BGR -> RGB
         img = np.ascontiguousarray(img)
         img = torch.from_numpy(img).to(self.device)
         img = img.half() if self.half else img.float()  # uint8 to fp16/32
@@ -107,7 +119,9 @@ class ObjectDetector:
         return img
 
 if __name__ == '__main__':
-    im = cv2.imread("inference/images/ballin.jpg")
+    rospy.init_node('test_node', anonymous=True)
+
     obj_detector = ObjectDetector()
-    while True:
-        obj_detector.callback(im)
+    rospy.Subscriber("/image_publisher_1680679032077590690/image_raw", Image, obj_detector.callback)
+
+    rospy.spin()
