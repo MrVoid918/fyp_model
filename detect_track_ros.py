@@ -52,7 +52,7 @@ class ObjectDetector:
         self.mot_converter = MOTConverter()
         self.model.eval()
         self.stride = int(self.model.stride.max())  # model stride
-        imgsz = check_img_size(self.img_size, s=self.stride)  # check img_size
+        self.imgsz = check_img_size(self.img_size, s=self.stride)  # check img_size
 
         self.bb_plotter = BoundingBoxPlotter()
         self.bridge = cv_bridge.CvBridge()
@@ -92,7 +92,7 @@ class ObjectDetector:
 
             if len(det):
                 # Rescale boxes from img_size to im0 size
-                det[:, :4] = scale_coords(img.shape[2:], det[:, :4], self.ori_im).round()
+                det[:, :4] = scale_coords(img.shape[2:], det[:, :4], cv_img.shape).round()
                 mot_data = self.mot_converter(det, frame = i)
                 dets = mot_data[:, 2:7]
                 trackers = self.sort.update(dets)
@@ -108,7 +108,7 @@ class ObjectDetector:
 
     def preprocess(self, cv_img):
         img = letterbox(cv_img, self.img_size, auto= True, stride=self.stride)[0]
-        img = img[..., ::-1].transpose(2, 1, 0) # Convert to BGR -> RGB
+        img = img[..., ::-1].transpose(2, 0, 1) # Convert to BGR -> RGB
         img = np.ascontiguousarray(img)
         img = torch.from_numpy(img).to(self.device)
         img = img.half() if self.half else img.float()  # uint8 to fp16/32
