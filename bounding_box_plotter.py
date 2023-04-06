@@ -63,7 +63,7 @@ class BoundingBoxPlotter():
                 else:
                     self._plot_one_box(box[:4], img, label=self.classes[0], color=self.colors[int(box[4]) % 300], line_thickness=2)
 
-    def draw_mot(self, img, boxinfo, label = None) -> None:
+    def draw_mot(self, img, boxinfo, label = None, color = None) -> None:
         """
         Draw bounding boxes on image based on MOT challenge format
         Does not return images, rather it overwrites the images with the bounding boxes drawn on them
@@ -75,6 +75,13 @@ class BoundingBoxPlotter():
             if np.any(box):
                 box[4:6] = box[4:6] + box[2:4]
                 if label is not None:
-                    self._plot_one_box(box[2:6], img, label=label, color=self.colors[int(box[1]) % 300], line_thickness=2)
+                    box_label = label
                 else:
-                    self._plot_one_box(box[2:6], img, label=self.classes[0], color=self.colors[int(box[1]) % 300], line_thickness=2)
+                    box_label = self.classes[0]
+
+                if color is not None:
+                    box_color = color
+                else:
+                    box_color = self.colors[int(box[1]) % 300]
+
+                self._plot_one_box(box[2:6], img, label=box_label, color=box_color, line_thickness=2)
