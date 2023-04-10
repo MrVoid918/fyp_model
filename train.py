@@ -1,6 +1,6 @@
 from jaad.jaad import parse_sgnet_args
 from dataloaders.data_utils import build_data_loader
-from models.traj_pred import TrajPred, Decoder, TrajConcat, Loss
+from models.traj_pred import TrajPred, Decoder, TrajConcat, Loss, TrajPredGRU, DecoderGRU
 from pathlib import Path
 import numpy as np
 from torch.utils.tensorboard import SummaryWriter
@@ -36,13 +36,13 @@ if __name__ == '__main__':
     val_jaad_dataloader = build_data_loader(jaad_args, 'val')
     test_jaad_dataloader = build_data_loader(jaad_args, 'test')
 
-    traj_pred = TrajPred(
+    traj_pred = TrajPredGRU(
             input_size=jaad_args.input_dim,
             hidden_size=jaad_args.hidden_size,
             output_size=256,
         ).to('cuda:0')
 
-    decoder = Decoder(
+    decoder = DecoderGRU(
         input_size=256,
         hidden_size=jaad_args.hidden_size,
         output_size=4,
