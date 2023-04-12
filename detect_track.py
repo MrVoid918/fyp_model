@@ -46,6 +46,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument('-w', '--weights', nargs='+', type=str, default='./weights/yolov7-tiny.pt', help='model.pt path(s)')
+    parser.add_argument('--webcam', action="store_true", help='Whether to use webcam or not')
     parser.add_argument('-s', '--source', type=str, default='inference/images', help='source')  # file/folder, 0 for webcam
     parser.add_argument('--img_size', type=int, default=640, help='inference size (pixels)')
     parser.add_argument('--device', default='0', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
@@ -76,7 +77,7 @@ if __name__ == "__main__":
         model.half()
 
     vid_path, vid_writer = None, None
-    webcam = False
+    webcam = args.webcam
     #! TODO: Either receive inference from webcam or from image
     bb_plotter = BoundingBoxPlotter()
     out_file = Path(f'output/{datetime.now().strftime("%Y%m%d_%H%M%S")}.txt').resolve()
@@ -130,11 +131,15 @@ if __name__ == "__main__":
         logger.info(f"Detection Time: {t2 - t1:.3f}ms. NMS Time: {t3 - t1:.3f}ms")
         # -----------------------------------------------------------
 
+        print(f"Image: {len(img)}, Original: {len(im0s)}")
+
         trackers = []
         # Process detections and track
         for i, det in enumerate(pred, start=1):  # detections per image
 
             if len(det):
+                if webcam:  # batch_size >= 1
+                    p, s, im0s, frame = path[i - 1], '%g: ' % i, im0s[i - 1].copy(), dataset.count
                 # Rescale boxes from img_size to im0 size
                 det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0s.shape).round()
                 mot_data = mot_converter(det, frame = i)
@@ -143,6 +148,9 @@ if __name__ == "__main__":
                 # trackers, unm_tr, unm_gt = sort_oh.update(dets, [])
 
                 bb_plotter.draw_sort(im0s, trackers, id = True)
+
+                cv2.imshow('image', im0s)
+                cv2.waitKey(1)
         
             if len(dataset) > 1:
                 vid_writer.write(im0s)
