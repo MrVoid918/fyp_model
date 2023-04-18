@@ -9,3 +9,4 @@ inference/images
 *.mp4
 logs/
 pie_annotations/
+TensorRT*

@@ -7,15 +7,19 @@ from torch.utils.tensorboard import SummaryWriter
 import torchvision.io as vision_io
 import torchvision.utils as vision_utils
 import torchvision.ops as vision_ops
+from torchreid.utils.avgmeter import AverageMeter
 
 from loguru import logger
-from typing import Tuple
+from typing import Tuple, Union
 
 import torch
 from torch.optim import Adam, SGD
 from torch.optim.lr_scheduler import CosineAnnealingLR, StepLR, OneCycleLR
 
-def evaluate(args, bbox_gt: torch.Tensor, bbox_pred: torch.Tensor) -> \
+def evaluate(args, 
+             bbox_gt: torch.Tensor, 
+             bbox_pred: torch.Tensor, 
+              ) -> \
     Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     This function evaluates the performance of the bounding box predictor
@@ -26,7 +30,7 @@ def evaluate(args, bbox_gt: torch.Tensor, bbox_pred: torch.Tensor) -> \
     if args.bbox_type == 'cxcywh':
         CMSE = torch.linalg.norm(bbox_gt[..., :2] - bbox_pred[..., :2])
         MSE = torch.linalg.norm((bbox_gt[..., 2:] + bbox_gt[..., 2:] / 2) - \
-            (bbox_pred[..., 2:] + bbox_pred[..., 2:] / 2))
+                                (bbox_pred[..., 2:] + bbox_pred[..., 2:] / 2))
         CFMSE = torch.linalg.norm(bbox_gt[-1, ..., :2] - bbox_pred[-1, ..., :2])
         return CMSE, MSE, CFMSE
 
@@ -36,13 +40,13 @@ if __name__ == '__main__':
     val_jaad_dataloader = build_data_loader(jaad_args, 'val')
     test_jaad_dataloader = build_data_loader(jaad_args, 'test')
 
-    traj_pred = TrajPredGRU(
+    traj_pred = TrajPred(
             input_size=jaad_args.input_dim,
             hidden_size=jaad_args.hidden_size,
             output_size=256,
         ).to('cuda:0')
 
-    decoder = DecoderGRU(
+    decoder = Decoder(
         input_size=256,
         hidden_size=jaad_args.hidden_size,
         output_size=4,
@@ -73,6 +77,14 @@ if __name__ == '__main__':
     # dec_scheduler = StepLR(dec_optimizer, step_size=5, gamma=0.5)
 
     writer = SummaryWriter()
+
+    val_mse_meter = AverageMeter()
+    val_cmse_meter = AverageMeter()
+    val_cfmse_meter = AverageMeter()
+
+    test_mse_meter = AverageMeter()
+    test_cmse_meter = AverageMeter()
+    test_cfmse_meter = AverageMeter()
 
     path_anno = Path('inference/seq/gt.txt').resolve()
     assert path_anno.exists(), f"{path_anno} does not exist"
@@ -128,9 +140,6 @@ if __name__ == '__main__':
 
             with torch.no_grad():
                 val_loss = 0
-                val_mse = 0
-                val_cmse = 0
-                val_cfmse = 0
                 traj_pred.eval()
                 decoder.eval()
                 for i, data in enumerate(val_jaad_dataloader):
@@ -150,7 +159,11 @@ if __name__ == '__main__':
 
                     loss = objective(dec_output, input_vec, end_result, ground_truth, )
 
-                    val_mse, val_cmse, val_cfmse = evaluate(jaad_args, end_result, ground_truth)
+                    val_mse_, val_cmse_, val_cfmse_ = evaluate(jaad_args, end_result, ground_truth)
+
+                    val_mse_meter.update(val_mse_)
+                    val_cmse_meter.update(val_cmse_)
+                    val_cfmse_meter.update(val_cfmse_)
 
                     val_loss += loss
 
@@ -158,9 +171,6 @@ if __name__ == '__main__':
 
             with torch.no_grad():
                 test_loss = 0
-                test_mse = 0
-                test_cmse = 0
-                test_cfmse = 0
                 traj_pred.eval()
                 decoder.eval()
                 for i, data in enumerate(test_jaad_dataloader):
@@ -181,19 +191,23 @@ if __name__ == '__main__':
                     loss = objective(dec_output, input_vec, end_result, ground_truth, )
 
                     test_mse, test_cmse, test_cfmse = evaluate(jaad_args, end_result, ground_truth)
-                    
+
+                    test_mse_meter.update(test_mse)
+                    test_cmse_meter.update(test_cmse)
+                    test_cfmse_meter.update(test_cfmse)
+
                     test_loss += loss
 
                 logger.info(f"Test Loss: {test_loss}")
 
             writer.add_scalar('Loss/val', val_loss, epoch)
             writer.add_scalar('Loss/test', test_loss, epoch)
-            writer.add_scalar('Val/MSE', val_mse, epoch)
-            writer.add_scalar('Val/CMSE', val_cmse, epoch)
-            writer.add_scalar('Val/CFMSE', val_cfmse, epoch)
-            writer.add_scalar('Test/MSE', test_mse, epoch)
-            writer.add_scalar('Test/CMSE', test_cmse, epoch)
-            writer.add_scalar('Test/CFMSE', test_cfmse, epoch)
+            writer.add_scalar('Val/MSE', val_mse_meter.avg, epoch)
+            writer.add_scalar('Val/CMSE', val_cmse_meter.avg, epoch)
+            writer.add_scalar('Val/CFMSE', val_cfmse_meter.avg, epoch)
+            writer.add_scalar('Test/MSE', test_mse_meter.avg, epoch)
+            writer.add_scalar('Test/CMSE', test_cmse_meter.avg, epoch)
+            writer.add_scalar('Test/CFMSE', test_cfmse_meter.avg, epoch)
 
             if jaad_args.show_result and epoch % jaad_args.show_interval == 0:
                 # Use example from MOT17 to show the result
@@ -238,6 +252,13 @@ if __name__ == '__main__':
                 writer.add_video('sampled_trajectory', vid, epoch, fps = 10)
 
             writer.flush()
+
+            val_mse_meter.reset()
+            val_cmse_meter.reset()
+            val_cfmse_meter.reset()
+            test_mse_meter.reset()
+            test_cmse_meter.reset()
+            test_cfmse_meter.reset()
 
     except KeyboardInterrupt:
         pass

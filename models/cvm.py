@@ -1,13 +1,18 @@
 import torch
 from pathlib import Path
 import numpy as np
-
+from typing import Optional
+from numpy.typing import NDArray
 
 from loguru import logger
 
 class CVM:
 
-    def __init__(self, trk_file: str, past_frames=30, future_frames = 40, sample = False, xy = False):
+    def __init__(self, 
+                 past_frames=30, 
+                 future_frames = 40, 
+                 sample = False, 
+                 xy = False):
         """
         @trk_file: Path string to the tracking file
         @past_frames: Number of past frames to consider for prediction
@@ -15,17 +20,14 @@ class CVM:
         @sample: Sample from Gaussian Distribution
         @xy: Predict with xy only, omit bbox width and height
         """
-        self.trk_file = Path().cwd() / 'output' / trk_file
-        assert self.trk_file.exists(), f"File {self.trk_file} does not exist"
         self.past_frames = past_frames
         self.future_frames = future_frames
-
         self.sample = sample
         self.xy = xy
 
         self._save_format = fmt = '%d', '%d', '%1.2f', '%1.2f', '%1.2f', '%1.2f', '%d', '%d', '%d', '%d'
 
-    def __call__(self, p_id: int, frame: int):
+    def __call__(self, data: NDArray, trk_filepath: Optional[str], p_id: int, frame: int):
         """This function performs prediction and saves the output in a file
         @p_id: Pedestrian ID
         @frame: Starting Frame
@@ -33,10 +35,13 @@ class CVM:
         # MOT format
         # frame, id, x, y, w, h, conf, -1, -1, -1
         logger.info("Performing Pedestrian Trajectory Prediction")
-        self.file = self._load()
-        data  = self.file[np.where((self.file[:, 1] == p_id) & \
-                           (self.file[:, 0] <= frame) & \
-                           (self.file[:, 0] >= np.max(frame - self.past_frames, 0)))]
+        if trk_filepath:
+            self.file = self._load(trk_file=trk_filepath)
+            data = self.file[np.where((self.file[:, 1] == p_id) & \
+                            (self.file[:, 0] <= frame) & \
+                            (self.file[:, 0] >= np.max(frame - self.past_frames, 0)))]
+        else:
+            data = data
 
         assert len(data) > 0, f"Person {p_id} not found in frame {frame}"
 
@@ -63,7 +68,47 @@ class CVM:
 
         logger.info("Completed Pedestrian Trajectory Prediction")
 
-    def _load(self):
+    def call_batch(self, bbox_data: NDArray):
+        """
+        Call the model for a batch of data
+        
+        Parameters:
+        ----------
+        data: NDArray
+            The data to be passed to the model
+            Expected in the format N x K x 8
+            N: Batch Number
+            K: Number of frames
+            4: Bounding Box Coordinates, Expected in cx, cy, w, h and it's derivatives format
+
+        Returns:
+        -------
+        result: NDArray
+            The predicted bounding box coordinates
+            Expected in the format N x P x 8
+            N: Batch Number
+            P: Number of predicted frames
+            4: Bounding Box Coordinates, Expected in cx, cy, w, h and it's derivatives format
+        """
+        batch_size = bbox_data.shape[0]
+        mean_vel = bbox_data[..., 4:].mean(axis=(0, 1))
+
+        if self.sample:
+            # Sample Gaussian Distribution
+            sigma = np.array([[0.5, 0, 0, 0],
+                              [0, 0.5, 0, 0], 
+                              [0, 0, 0.5, 0],
+                              [0, 0, 0, 0.5]])
+        else:
+            sigma = np.zeros((4, 4))
+
+        future_vel = np.random.default_rng().multivariate_normal(mean_vel, sigma, (batch_size, self.future_frames, ))
+        future_increments = np.cumsum(future_vel, axis=0)
+        return future_increments
+
+    def _load(self, trk_file: str):
+        self.trk_file = Path().cwd() / 'output' / trk_file
+        assert self.trk_file.exists(), f"File {self.trk_file} does not exist"
         return np.loadtxt(self.trk_file, delimiter=',')
 
     def _format_MOT_output(self, p_id, frame, bbox, data):

@@ -3,6 +3,7 @@ import numpy as np
 from torch import Tensor
 
 from typing import Union, List
+from numpy.typing import NDArray
 
 #! Design Pattern to use: Adapter
 class CommonOutputFormat:
@@ -44,3 +45,17 @@ class MOTConverter:
         assert mot is not None, "Invalid input to MOTConverter"
         mot = np.pad(mot, ((0, 0), (1, 0)), mode='constant', constant_values=frame)
         return mot
+
+    def sort_to_mot(self, ori_data: NDArray, frame: int):
+        """
+        Input: [[x1,y1,x2,y2,id],[x1,y1,x2,y2,id], ...]
+        Output: [[frame, id, x1, y1, w, h, 1, -1, -1, -1], ...]
+        """
+        data = ori_data.copy()
+        data[:, 2:4] -= data[:, 0:2] # [x1, y1, x2, y2] -> [x1, y1, w, h]
+        data = np.roll(data, 1, axis=1) # [x1, y1, w, h, id] -> [id, x1, y1, w, h]
+        data = np.pad(data, ((0, 0), (1, 0)), mode='constant', constant_values=frame)    # [frame, id, x1, y1, w, h]
+        data = np.pad(data, ((0, 0), (0, 1)), mode='constant', constant_values=1)    # [frame, id, x1, y1, w, h, 1]
+        data = np.pad(data, ((0, 0), (0, 3)), mode='constant', constant_values=-1)    # [frame, id, x1, y1, w, h, 1, -1, -1, -1]
+
+        return data

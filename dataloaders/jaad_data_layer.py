@@ -8,6 +8,8 @@ from .JAAD_origin import JAAD
 from copy import deepcopy
 from pathlib import Path
 
+from traceback import print_exc
+
 class JAADDataLayer(data.Dataset):
     def __init__(self, args, split):
         self.split = split
@@ -265,7 +267,11 @@ class JAADDataLayer(data.Dataset):
             target: Target tensor with shape (self.args.segment_len, dec_steps, :)
                     The target is the change of the values. e.g. target of yaw is \delta{\theta}_{t0,tn} 
         '''
-        target = np.zeros((observe_length, predict_length, session.shape[-1] * 2))
+        if self.args.velocity:
+            target = np.zeros((observe_length, predict_length, session.shape[-1] * 2))
+        else:
+            target = np.zeros((observe_length, predict_length, session.shape[-1]))
+
         for i, target_start in enumerate(range(start, end)):
             '''the target of time t is the change of bbox/ego motion at times [t+1,...,t+5}'''
             target_start = target_start + 1
@@ -276,13 +282,17 @@ class JAADDataLayer(data.Dataset):
                 #                            session[target_start-1:target_start,:])
                 vel = np.asarray(session[target_start:target_start+predict_length,:] - 
                                            session[target_start-1:target_start,:])
-                target[i, ...] = np.concatenate((pos, vel), axis=-1)
+                if self.args.velocity:
+                    target[i, ...] = np.concatenate((pos, vel), axis=-1)
+                else:
+                    target[i, ...] = pos
                 end_dims = 8 if self.args.velocity else 4
                 assert target.shape[-1] == end_dims, "Target Shape is not correct"
-            except:
+            except Exception as e:
                 print("segment start: ", start)
                 print("sample start: ", target_start)
                 print("segment end: ", end)
                 print(session.shape)
+                print(target.shape, end_dims)
                 raise ValueError()
         return target

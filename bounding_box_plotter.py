@@ -37,17 +37,21 @@ class BoundingBoxPlotter():
             cv.putText(img, label, (c1[0], c1[1] - 2), 0, tl / 3,
                         [225, 255, 255], thickness=tf, lineType=cv.LINE_AA)
 
-    def draw(self, img, boxinfo):
+    def draw(self, img, boxinfo, imshow = False):
         for xyxy, conf, cls in boxinfo:
             self._plot_one_box(xyxy, img, label=self.classes[int(cls)], color=self.colors[int(cls)], line_thickness=2)
-        cv.imshow('Press ESC to Exit', img) 
-        cv.waitKey(5000)
+        if imshow:
+            cv.imshow('Press ESC to Exit', img) 
+            cv.waitKey(5000)
 
-    def draw_yolov7(self, img, boxinfo):
+    def draw_yolov7(self, img, boxinfo, imshow = False):
+        if boxinfo.ndim == 3:
+            boxinfo = boxinfo[0]
         for box in boxinfo:
             self._plot_one_box(box[:4], img, label=self.classes[int(box[-1])], color=self.colors[int(box[-1])], line_thickness=2)
-        cv.imshow('Press ESC to Exit', img) 
-        cv.waitKey(5000)
+        if imshow:
+            cv.imshow('Press ESC to Exit', img)
+            cv.waitKey(5000)
 
     def draw_sort(self, img, boxinfo, id = True):
         """
