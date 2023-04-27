@@ -39,15 +39,15 @@ class PredictTrajectory(nn.Module):
             input_size=input_size,
             hidden_size=enc_hidden_size,
             output_size=enc_output_size,
-        )
+        ).cuda()
         self.dec = Decoder(
             input_size=enc_output_size,
             hidden_size=enc_hidden_size,
             output_size=4,
             frames_future=future_frames,
-        )
+        ).cuda()
 
-        self.traj_cat = TrajConcat()
+        self.traj_cat = TrajConcat().cuda()
 
         checkpoint = torch.load(self.model_path)
 

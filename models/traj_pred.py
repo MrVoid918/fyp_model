@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 
+from torchvision.ops import distance_box_iou_loss, box_convert
+
 
 class TrajPred(nn.Module):
     '''
@@ -147,6 +149,7 @@ class TrajConcat(nn.Module):
     def forward(self, x, last_bb):
         if self.velocity or self.args.velocity:
             # Indexing with arrays to perserve the shape
+            # Do note that because we reversed in flipud, we should use the first bb
             last_bb = last_bb[:, [0], :4]
         assert x.shape[0] == last_bb.shape[0] and x.shape[-1] == last_bb.shape[-1] \
             , f"x and last bounding box should be of same shape, Instead got {x.shape} and {last_bb.shape}"
@@ -168,10 +171,13 @@ class Loss(nn.Module):
         :param pred_bb: predicted output vector
         """
         loss = nn.L1Loss()
-    
+        if self.args.bbox_type == "cxcywh":
+            out_bb_xyxy = box_convert(out_bb, in_fmt = 'cxcywh', out_fmt = 'xyxy')
+            pred_bb_xyxy = box_convert(pred_bb, in_fmt = 'cxcywh', out_fmt = 'xyxy')
         
         return self.alpha * loss(dec_bb, inp_vec) / self.args.enc_steps / self.args.input_dim  + \
-            self.beta * loss(out_bb, pred_bb) / self.args.dec_steps / 4
+            self.beta * loss(out_bb, pred_bb) / self.args.dec_steps / 4 + \
+            distance_box_iou_loss(out_bb_xyxy, pred_bb_xyxy, "mean")
 
 class EncoderLoss(nn.Module):
 

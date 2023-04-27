@@ -1,5 +1,5 @@
 from jaad.jaad import parse_sgnet_args
-from dataloaders.data_utils import build_data_loader
+from dataloaders.data_utils import build_data_loader, bbox_normalize, bbox_denormalize
 from models.traj_pred import TrajPred, Decoder, TrajConcat, Loss, TrajPredGRU, DecoderGRU
 from pathlib import Path
 import numpy as np
@@ -11,9 +11,11 @@ from torchreid.utils.avgmeter import AverageMeter
 
 from loguru import logger
 from typing import Tuple, Union
+from datetime import datetime
 
 import torch
 from torch.optim import Adam, SGD
+from torch.nn.functional import mse_loss
 from torch.optim.lr_scheduler import CosineAnnealingLR, StepLR, OneCycleLR
 
 def evaluate(args, 
@@ -26,12 +28,25 @@ def evaluate(args,
     @param bbox_gt: Ground truth bounding boxes => [N, K, 4]
     @param bbox_pred: Predicted bounding boxes => [N, K, 4]
     @return: The MSE between upper left coords and MSE between center coords
+
+    CMSE: Center Mean Squared Error of Center
+    MSE: Mean Squared Error of Center
+    CFMSE: Center Final Mean Squared Error
+    ADE: Average Displacement Error of Center
+    FDE: Final Displacement Error of Center
     """
+    if args.normalize == "zero-one":
+        bbox_gt = bbox_denormalize(bbox_gt, 
+                        jaad_args.max_bbox[0], 
+                        jaad_args.max_bbox[1], )
+        bbox_pred = bbox_denormalize(bbox_pred, 
+                                     jaad_args.max_bbox[0], 
+                                     jaad_args.max_bbox[1], )
     if args.bbox_type == 'cxcywh':
-        CMSE = torch.linalg.norm(bbox_gt[..., :2] - bbox_pred[..., :2])
-        MSE = torch.linalg.norm((bbox_gt[..., 2:] + bbox_gt[..., 2:] / 2) - \
-                                (bbox_pred[..., 2:] + bbox_pred[..., 2:] / 2))
-        CFMSE = torch.linalg.norm(bbox_gt[-1, ..., :2] - bbox_pred[-1, ..., :2])
+        CMSE = mse_loss(bbox_gt[..., :2], bbox_pred[..., :2])
+        MSE = torch.linalg.norm((bbox_gt[..., 2:] - bbox_gt[..., 2:] / 2) - \
+                                (bbox_pred[..., 2:] - bbox_pred[..., 2:] / 2))
+        CFMSE = mse_loss(bbox_gt[:, -1, :2], bbox_pred[:, -1, :2])
         return CMSE, MSE, CFMSE
 
 if __name__ == '__main__':
@@ -76,7 +91,7 @@ if __name__ == '__main__':
     # enc_scheduler = StepLR(enc_optimizer, step_size=5, gamma=0.5)
     # dec_scheduler = StepLR(dec_optimizer, step_size=5, gamma=0.5)
 
-    writer = SummaryWriter()
+    writer = SummaryWriter(f"runs/{datetime.today().strftime('%Y%m%d_%H%M')}")
 
     val_mse_meter = AverageMeter()
     val_cmse_meter = AverageMeter()
@@ -210,6 +225,7 @@ if __name__ == '__main__':
             writer.add_scalar('Test/CFMSE', test_cfmse_meter.avg, epoch)
 
             if jaad_args.show_result and epoch % jaad_args.show_interval == 0:
+                # Plot the result
                 # Use example from MOT17 to show the result
                 path = Path('inference/images/img1/').resolve()
                 assert path.exists(), f"{path} does not exist"
@@ -225,21 +241,32 @@ if __name__ == '__main__':
                 if input_data.ndim == 2:
                     input_data = input_data.unsqueeze(0)
 
+                if jaad_args.normalize == "zero-one":
+                    input_data = bbox_normalize(input_data, 
+                        jaad_args.max_bbox[0], 
+                        jaad_args.max_bbox[1], )
+
                 with torch.no_grad():
                     enc_output, dec_output, enc_h = traj_pred(input_data)
                     pred = decoder(enc_output, enc_h)
                     pred = traj_concat(pred, input_data)
+                    if jaad_args.normalize == "zero-one":
+                        pred = bbox_denormalize(pred, 
+                            jaad_args.max_bbox[0], 
+                            jaad_args.max_bbox[1], )
                     pred = vision_ops.box_convert(pred, in_fmt = 'cxcywh', out_fmt = 'xyxy')
 
                 im_files = []
                 # We start enumerate from future frames
-                for frame_id, im_path in enumerate(sorted(list(path.iterdir()))[jaad_args.enc_steps+1:jaad_args.enc_steps + jaad_args.dec_steps + 1], 
+                for frame_id, im_path in enumerate(
+                    sorted(list(path.iterdir()))[jaad_args.enc_steps+1:jaad_args.enc_steps + jaad_args.dec_steps + 1], 
                                         start = 1):
                     im = vision_io.read_image(str(im_path))
                     bbox = bboxes[[frame_id - 1], :]
                     pred_bbox = pred[0, [frame_id - 1], :]
                     if pred_bbox.ndim == 1:
                         pred_bbox = pred_bbox.unsqueeze(0)
+                    print(pred_bbox.shape)
                     im = vision_utils.draw_bounding_boxes(im, bbox, colors = (255, 0, 0), width = 3)
                     im = vision_utils.draw_bounding_boxes(im, pred_bbox, colors = (0, 0, 255), width = 3)
                     im_files.append(im)
