@@ -149,8 +149,8 @@ class TrajConcat(nn.Module):
     def forward(self, x, last_bb):
         if self.velocity or self.args.velocity:
             # Indexing with arrays to perserve the shape
-            # Do note that because we reversed in flipud, we should use the first bb
-            last_bb = last_bb[:, [0], :4]
+            # Do note that because we reversed in flip, we should use the first bb
+            last_bb = last_bb[:, [-1], :4]
         assert x.shape[0] == last_bb.shape[0] and x.shape[-1] == last_bb.shape[-1] \
             , f"x and last bounding box should be of same shape, Instead got {x.shape} and {last_bb.shape}"
         return last_bb + x
