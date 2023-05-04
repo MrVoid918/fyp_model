@@ -5,6 +5,9 @@ import tracking.deepsort.kf as kalman_filter
 import tracking.deepsort.assignment as linear_assignment
 import tracking.deepsort.iou as iou_matching
 from tracking.deepsort.track import Track
+from tracking.deepsort.detection import Detection
+
+from typing import List
 
 
 class Tracker:
@@ -37,14 +40,24 @@ class Tracker:
 
     """
 
-    def __init__(self, metric, max_iou_distance=0.7, max_age=70, n_init=3):
+    def __init__(self, 
+                 metric, 
+                 max_iou_distance=0.7, 
+                 max_age=70, 
+                 n_init=3, 
+                 use_EMA = False, 
+                 use_NSA = False, 
+                 cascade_depth = 1,):
         self.metric = metric
         self.max_iou_distance = max_iou_distance
         self.max_age = max_age
         self.n_init = n_init
+        self.use_EMA = use_EMA
+        self.use_NSA = use_NSA
+        self.cascade_depth = cascade_depth
 
         self.kf = kalman_filter.KalmanFilter()
-        self.tracks = []
+        self.tracks : List[Track] = []
         self._next_id = 1
 
     def predict(self):
@@ -55,7 +68,7 @@ class Tracker:
         for track in self.tracks:
             track.predict(self.kf)
 
-    def update(self, detections):
+    def update(self, detections: List[Detection]):
         """Perform measurement update and track management.
 
         Parameters
@@ -92,7 +105,10 @@ class Tracker:
 
     def _match(self, detections):
 
-        def gated_metric(tracks, dets, track_indices, detection_indices):
+        def gated_metric(tracks: List[Track], 
+                         dets: List[Detection], 
+                         track_indices, 
+                         detection_indices):
             features = np.array([dets[i].feature for i in detection_indices])
             targets = np.array([tracks[i].track_id for i in track_indices])
             cost_matrix = self.metric.distance(features, targets)
@@ -111,7 +127,7 @@ class Tracker:
         # Associate confirmed tracks using appearance features.
         matches_a, unmatched_tracks_a, unmatched_detections = \
             linear_assignment.matching_cascade(
-                gated_metric, self.metric.matching_threshold, self.max_age,
+                gated_metric, self.metric.matching_threshold, self.cascade_depth,
                 self.tracks, detections, confirmed_tracks)
 
         # Associate remaining tracks together with unconfirmed tracks using IOU.
@@ -131,8 +147,8 @@ class Tracker:
         return matches, unmatched_tracks, unmatched_detections
 
     def _initiate_track(self, detection):
-        mean, covariance = self.kf.initiate(detection.to_xyah())
+        mean, covariance = self.kf.initialize(detection.to_xyah())
         self.tracks.append(Track(
             mean, covariance, self._next_id, self.n_init, self.max_age,
-            detection.feature))
+            detection.feature, use_EMA = self.use_EMA, use_NSA = self.use_NSA))
         self._next_id += 1

@@ -143,7 +143,7 @@ class KalmanFilter:
 
         return mean, covariance
 
-    def project(self, mean, covariance):
+    def project(self, mean, covariance, conf = None):
         """Project state distribution to measurement space.
 
         Parameters
@@ -166,6 +166,8 @@ class KalmanFilter:
             1e-1,
             self._std_weight_position * mean[3],
         ]
+        if conf:
+            std = [(1 - conf) * x for x in std]
         innovation_cov = np.diag(np.square(std))
 
         mean = np.dot(self._update_mat, mean)

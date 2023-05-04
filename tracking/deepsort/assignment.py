@@ -4,7 +4,7 @@ import numpy as np
 
 # from sklearn.utils.linear_assignment_ import linear_assignment
 from scipy.optimize import linear_sum_assignment
-import tracking.deepsort.kf as kf
+import tracking.deepsort.kf as kalman_filter
 
 
 INFTY_COST = 1e5
@@ -202,7 +202,7 @@ def gate_cost_matrix(
 
     """
     gating_dim = 2 if only_position else 4
-    gating_threshold = kf.chi2inv95[gating_dim]
+    gating_threshold = kalman_filter.chi2inv95[gating_dim]
     measurements = np.asarray([detections[i].to_xyah() for i in detection_indices])
     for row, track_idx in enumerate(track_indices):
         track = tracks[track_idx]

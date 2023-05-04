@@ -13,15 +13,34 @@ __all__ = ['DeepSort']
 
 
 class DeepSort(object):
-    def __init__(self, model_path, model_config=None, max_dist=0.2, min_confidence=0.3, nms_max_overlap=1.0, max_iou_distance=0.7, max_age=70, n_init=3, nn_budget=100, use_cuda=True):
+    def __init__(self, model_path = 'weights/reid/osnet_x0_25_msmt17_256x128_amsgrad_ep180_stp80_lr0.003_b128_fb10_softmax_labelsmooth_flip.pth', 
+                       model_config=None, 
+                       max_dist=0.3, 
+                       min_confidence=0.3, 
+                       nms_max_overlap=1.0, 
+                       max_iou_distance=0.6, 
+                       max_age=100, 
+                       n_init=3, 
+                       nn_budget=100, 
+                       use_cuda=True, 
+                       use_EMA = False, 
+                       use_NSA = False, 
+                       use_CMC = False, 
+                       cascade_depth=1,):
         self.min_confidence = min_confidence
         self.nms_max_overlap = nms_max_overlap
 
-        self.extractor = OSNet(model_config, model_path, use_cuda=use_cuda)
-
+        self.extractor = OSNet(path=model_path)
         max_cosine_distance = max_dist
         metric = NearestNeighborDistanceMetric("cosine", max_cosine_distance, nn_budget)
-        self.tracker = Tracker(metric, max_iou_distance=max_iou_distance, max_age=max_age, n_init=n_init)
+        self.tracker = Tracker(metric, 
+                               max_iou_distance=max_iou_distance, 
+                               max_age=max_age, 
+                               n_init=n_init, 
+                               use_EMA = use_EMA,
+                               use_NSA = use_NSA, 
+                               cascade_depth = cascade_depth, 
+                               )
 
     def update(self, 
                det_bbox: NDArray, 
@@ -41,8 +60,8 @@ class DeepSort(object):
         features = self._get_features(det_bbox, ori_img)
         # bbox_tlwh = self._xywh_to_tlwh(bbox_xywh)
         
-        detections = [Detection(det_bbox[i, 2:6], det_bbox[6], features[i, ...]) 
-            for i in range(det_bbox)]
+        detections = [Detection(det_bbox[i, :4], det_bbox[i, 4], features[i, ...]) 
+            for i in range(len(det_bbox))]
 
         # # run on non-maximum supression
         # boxes = np.array([d.tlwh for d in detections])
@@ -55,17 +74,18 @@ class DeepSort(object):
         self.tracker.update(detections)
 
         # # output bbox identities
-        # outputs = []
-        # for track in self.tracker.tracks:
-        #     if not track.is_confirmed() or track.time_since_update > 1:
-        #         continue
-        #     box = track.to_tlwh()
-        #     x1,y1,x2,y2 = self._tlwh_to_xyxy(box)
-        #     track_id = track.track_id
-        #     outputs.append(np.array([x1,y1,x2,y2,track_id], dtype=np.int))
-        # if len(outputs) > 0:
-        #     outputs = np.stack(outputs,axis=0)
-        # return outputs
+        outputs = []
+        for track in self.tracker.tracks:
+            if not track.is_confirmed() or track.time_since_update > 1:
+                continue
+            box = track.to_ltrb()
+            x1,y1,x2,y2 = box
+            # x1,y1,x2,y2 = self._tlwh_to_xyxy(box)
+            track_id = track.track_id
+            outputs.append(np.array([x1,y1,x2,y2,track_id], dtype=np.int))
+        if len(outputs) > 0:
+            outputs = np.stack(outputs,axis=0)
+        return outputs
 
     @staticmethod
     def _xywh_to_tlwh(bbox_xywh):
@@ -117,7 +137,7 @@ class DeepSort(object):
         Parameters
         ----------
         bbox : NDArray
-            Bounding Boxes in MOT Format, [N, 10]
+            Bounding Boxes in xywh format
         ori_img : NDArray
             Original Image
 

@@ -1,4 +1,6 @@
 # vim: expandtab:ts=4:sw=4
+from tracking.deepsort.kf import KalmanFilter
+from tracking.deepsort.detection import Detection
 class TrackState:
     """
     Enumeration type for the single target track state. Newly created tracks are
@@ -84,6 +86,8 @@ class Track:
         det_conf=None,
         instance_mask=None,
         others=None,
+        use_EMA = False,
+        use_NSA = False, 
     ):
         self.mean = mean
         self.covariance = covariance
@@ -91,6 +95,8 @@ class Track:
         self.hits = 1
         self.age = 1
         self.time_since_update = 0
+        self.use_EMA = use_EMA
+        self.use_NSA = use_NSA
 
         self.state = TrackState.Tentative
         self.features = []
@@ -246,9 +252,13 @@ class Track:
         """
         self.original_ltwh = detection.get_ltwh()
         self.mean, self.covariance = kf.update(
-            self.mean, self.covariance, detection.to_xyah(), detection.confidence
+            self.mean, self.covariance, detection.to_xyah(), detection.confidence, 
         )
-        self.features.append(detection.feature)
+        if self.use_EMA and len(self.features) > 0:
+            updated_feature = self.features[-1] * 0.9 + detection.feature * 0.1
+        else:
+            updated_feature = detection.feature
+        self.features = [updated_feature, ]
         self.latest_feature = detection.feature
         self.det_conf = detection.confidence
         self.det_class = detection.class_name
