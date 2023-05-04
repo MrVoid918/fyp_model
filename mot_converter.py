@@ -37,7 +37,11 @@ class MOTConverter:
             #? Pad end and front with -1, as x_3d and y_3d
             mot = np.pad(mot, ((0, 0), (1, 3)), mode='constant', constant_values=-1)
         elif isinstance(bbox, Tensor):
+            """
+            Converts from Yolov7 Model [[x1, y1, x2, y2, class, conf]] to MOT format
+            """
             bbox = bbox.cpu().detach().numpy()
+            bbox[:, 2:4] -= bbox[:, 0:2] # [x1, y1, x2, y2] -> [x1, y1, w, h]
             # [[bbox, scores, classid]]
             bbox[:, 5] = -1
             mot = np.pad(bbox, ((0, 0), (1, 3)), mode='constant', constant_values=-1)

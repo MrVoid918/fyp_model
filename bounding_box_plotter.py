@@ -88,4 +88,4 @@ class BoundingBoxPlotter():
                 else:
                     box_color = self.colors[int(box[1]) % 300]
 
-                self._plot_one_box(box[2:6], img, label=box_label, color=box_color, line_thickness=2)
+                self._plot_one_box(box[2:6], img, label=str(box_label), color=box_color, line_thickness=2)
