@@ -174,7 +174,7 @@ class KalmanFilter:
         )
         return mean, covariance + innovation_cov
 
-    def update(self, mean, covariance, measurement):
+    def update(self, mean, covariance, measurement, conf = None):
         """Run Kalman filter correction step.
 
         Parameters
@@ -194,7 +194,7 @@ class KalmanFilter:
             Returns the measurement-corrected state distribution.
 
         """
-        projected_mean, projected_cov = self.project(mean, covariance)
+        projected_mean, projected_cov = self.project(mean, covariance, conf)
 
         chol_factor, lower = scipy.linalg.cho_factor(
             projected_cov, lower=True, check_finite=False

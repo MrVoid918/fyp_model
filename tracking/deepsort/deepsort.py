@@ -32,7 +32,7 @@ class DeepSort(object):
         Parameters
         ----------
         bbox_xywh : NDArray
-            Bounding Boxes in MOT Format, [N, 10]
+            Bounding Boxes in xywh format, 
         ori_img : NDArray
             Original Image
         """
@@ -127,15 +127,16 @@ class DeepSort(object):
             List of Features
         """
         im_crops = []
+        H, W, _ = ori_img.shape
         for box in bbox:
-            x1 = int(box[2])
-            y1 = int(box[3])
-            x2 = int(x1 + box[4])
-            y2 = int(y1 + box[5])
+            x1 = min(0, int(box[0]))
+            y1 = min(0, int(box[1]))
+            x2 = max(W, int(x1 + box[2]))
+            y2 = max(H, int(y1 + box[3]))
             im = ori_img[y1:y2, x1:x2, :]   # OpenCV: HWC
             im_crops.append(im)
         if im_crops:
-            features = self.extractor(im_crops)
+            features = self.extractor(im_crops).cpu().numpy()
         else:
             features = np.array([])
         return features

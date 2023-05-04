@@ -214,7 +214,7 @@ class Track:
         '''
         return self.latest_feature
 
-    def predict(self, kf):
+    def predict(self, kf: KalmanFilter):
         """Propagate the state distribution to the current time step using a
         Kalman filter prediction step.
 
@@ -232,7 +232,7 @@ class Track:
         self.instance_mask = None
         self.others = None
 
-    def update(self, kf, detection):
+    def update(self, kf: KalmanFilter, detection: Detection):
         """Perform Kalman filter measurement update step and update the feature
         cache.
 
@@ -246,7 +246,7 @@ class Track:
         """
         self.original_ltwh = detection.get_ltwh()
         self.mean, self.covariance = kf.update(
-            self.mean, self.covariance, detection.to_xyah()
+            self.mean, self.covariance, detection.to_xyah(), detection.confidence
         )
         self.features.append(detection.feature)
         self.latest_feature = detection.feature
